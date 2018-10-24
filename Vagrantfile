@@ -74,19 +74,13 @@ Vagrant.configure("2") do |config|
   #   vb.gui = true
   #
   #   # Customize the amount of memory on the VM:
-      vb.memory = "3072"
-      vb.cpus = 1
+      vb.memory = "4096"
+      vb.cpus = 4
       vb.name = "node#{i}"
     end
 
     node.vm.provision "shell" do |s|
       s.inline = <<-SHELL
-        # change time zone
-        cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
-        timedatectl set-timezone Asia/Shanghai
-        rm /etc/yum.repos.d/CentOS-Base.repo
-        cp /vagrant/yum/*.* /etc/yum.repos.d/
-        mv /etc/yum.repos.d/CentOS7-Base-163.repo /etc/yum.repos.d/CentOS-Base.repo
         # using socat to port forward in helm tiller
         # install  kmod and ceph-common for rook
         yum install -y wget curl conntrack-tools vim net-tools socat ntp kmod ceph-common
@@ -131,12 +125,6 @@ EOF
         usermod -aG docker vagrant
         rm -rf ~/.docker/
         yum install -y docker.x86_64
-
-cat > /etc/docker/daemon.json <<EOF
-{
-  "registry-mirrors" : ["http://2595fda0.m.daocloud.io"]
-}
-EOF
 
 if [[ $1 -eq 1 ]];then
     yum install -y etcd
@@ -205,6 +193,7 @@ EOF
         cp /vagrant/conf/kube-proxy.kubeconfig /etc/kubernetes/
         cp /vagrant/conf/kubelet.kubeconfig /etc/kubernetes/
 
+        curl -o /vagrant/kubernetes-server-linux-amd64.tar.gz https://dl.k8s.io/v1.12.0-rc.2/kubernetes-server-linux-amd64.tar.gz
         tar -xzvf /vagrant/kubernetes-server-linux-amd64.tar.gz -C /vagrant
         cp /vagrant/kubernetes/server/bin/* /usr/bin
 
@@ -267,6 +256,20 @@ EOF
           cd /vagrant/addon/dns/
           ./dns-deploy.sh -r 10.254.0.0/16 -i 10.254.0.2 |kubectl apply -f -
           cd -
+
+          echo "Added kubernetes repo for kubectl"
+cat > /etc/yum.repos.d/kubernetes.repo <<EOF
+[kubernetes]
+name=Kubernetes
+baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+EOF
+
+          echo "Install kubectl"
+          yum install -y kubectl
 
           echo "deploy kubernetes dashboard"
           kubectl apply -f /vagrant/addon/dashboard/kubernetes-dashboard.yaml
